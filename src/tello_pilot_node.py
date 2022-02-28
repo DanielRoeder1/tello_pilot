@@ -3,6 +3,8 @@
 import time
 import math
 
+from utils.GetTelloIP import get_tello_ip
+
 from anyio import sleep
 
 import rospy
@@ -86,7 +88,11 @@ class TelloSwarmMember:
         # ---- Settings ----
         self.video_frontend = TelloParameterParser.param_video_frontend(rospy.get_param('~video_frontend', 'av'))
 
-        self.tello = Tello(host=self.pn('ip'),
+
+        tello_ip = get_tello_ip(self.pn('mac'))
+        print(tello_ip)
+
+        self.tello = Tello(host=tello_ip,
             state_update_callback=self.imu_odometry_callback,
             av_open_lock=av_open_lock,
             video_frontend=self.video_frontend)

@@ -3,7 +3,7 @@
 
 		<node pkg="tello_pilot" name="tello_pilot_node" type="tello_pilot_node.py" output="screen">
             <!-- tello_list [List]: Defines the names of each drone in the swarm -->
-            <param name="tello_list" value="a,b" type="str" />
+            <param name="tello_list" value="a" type="str" />
             <!-- automatic_recovery [bool] (EXPERIMENTAL!): Determines whether or not the node should automatically
                     try to reconnect to a drone if detects that it was disconnected for whatever reason. -->
             <param name="automatic_recovery" value="false" type="bool" />
@@ -19,9 +19,8 @@
             <!-- camera_resolution [-]: This can be 480P or 720P. --> 
             <param name="camera_resolution" value="720P" type="str" />
             <!-- GLOBAL END -->
-            
-            <param name="a_ip" value="192.168.0.100" />
-            <param name="b_ip" value="192.168.0.101" />
+
+            <param name="a_mac" value="34:d2:62:ee:05:64" />
 
 		</node>
 
