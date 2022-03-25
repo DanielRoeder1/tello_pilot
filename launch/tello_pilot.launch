@@ -15,7 +15,7 @@
             <!-- camer_fps [Hz]: This can be 5, 15, or 30. --> 
 			<param name="camera_fps" value="30" type="int" /> 
             <!-- camera_bitrate [MB/s]: This can be auto, 1, 2, 3, 4, or 5. --> 
-            <param name="camera_bitrate" value="1" type="str" />
+            <param name="camera_bitrate" value="4" type="str" />
             <!-- camera_resolution [-]: This can be 480P or 720P. --> 
             <param name="camera_resolution" value="720P" type="str" />
             <!-- GLOBAL END -->

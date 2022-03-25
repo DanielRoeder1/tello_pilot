@@ -10,7 +10,7 @@ from anyio import sleep
 import rospy
 from tf.transformations import quaternion_from_euler
 
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, String
 from sensor_msgs.msg import Image, Imu
 from geometry_msgs.msg import TwistStamped
 from tello_pilot.msg import CameraDirection
@@ -118,6 +118,7 @@ class TelloSwarmMember:
         self.land_subscriber = rospy.Subscriber(self.tn('land'), Empty, self.cmd_land)
         self.cmd_vel_subscriber = rospy.Subscriber(self.tn('cmd_vel'), TwistStamped, self.cmd_vel)
         self.emergency_subscriber = rospy.Subscriber(self.tn('emergency'), Empty, self.cmd_emergency)
+        self.mission_subscriber = rospy.Subscriber(self.tn("mission"),String, self.run_mission)
 
         # ---- Settings ----
         self.camera_direction = Tello.CAMERA_FORWARD
@@ -146,7 +147,7 @@ class TelloSwarmMember:
         self.keep_alive_timer = rospy.Timer(rospy.Duration(3), self.keep_alive_callback)
     
     def keep_alive_callback(self, event):
-        rospy.loginfo("keepalive")
+        #rospy.loginfo("keepalive")
         self.tello.send_keepalive()
     
     def recovery_callback(self, event):
@@ -205,6 +206,42 @@ class TelloSwarmMember:
         self.tello.takeoff()
 
     def cmd_land(self, msg):
+        self.tello.land()
+
+    def run_mission(self,path):
+        import datetime
+        self.tello.enable_mission_pads()
+        with open(path.data, "r") as file:
+            self.tello.takeoff()
+            pad = self.tello.get_mission_pad_id()
+            rospy.loginfo(f"mission pad num {pad}")
+
+            for line in file:
+                if not line: break
+                command_split = line.split()
+                # Go
+                if (command_split[0] == "go"):
+                    rospy.loginfo("Running Go")
+                    inputs = [int(l) for l in command_split[1:]]
+                    if len(inputs) == 5:
+                        self.tello.go_xyz_speed_mid(*inputs, timeout = 100)
+                    elif len(inputs) == 4:
+                        self.tello.go_xyz_speed(*inputs, timeout = 100)
+                # Curve
+                elif (command_split[0] == "curve"):
+                    self.tello.curve_xyz_speed_mid(*command_split[1:])
+                # Jump
+                elif (command_split[0] == "jump"):
+                    pass
+                # Rotate
+                elif (command_split[0] == "r"):
+                    param = int(command_split[1])
+                    if param > 0:
+                        self.tello.rotate_clockwise(param)
+                    else:
+                        self.tello.rotate_counter_clockwise(abs(param))
+
+
         self.tello.land()
 
     def cmd_vel(self, msg:TwistStamped):
