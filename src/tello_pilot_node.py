@@ -12,6 +12,7 @@ from tf.transformations import quaternion_from_euler
 
 from std_msgs.msg import Empty, String
 from sensor_msgs.msg import Image, Imu
+from sensor_msgs.msg import Joy
 from geometry_msgs.msg import TwistStamped
 from tello_pilot.msg import CameraDirection
 
@@ -87,15 +88,23 @@ class TelloSwarmMember:
 
         # ---- Settings ----
         self.video_frontend = TelloParameterParser.param_video_frontend(rospy.get_param('~video_frontend', 'av'))
+        
+
 
 
         tello_ip = get_tello_ip(self.pn('mac'))
+        if not tello_ip:
+            raise ValueError('The tello drone could not be found in the local network')
+        
         print(tello_ip)
 
         self.tello = Tello(host=tello_ip,
             state_update_callback=self.imu_odometry_callback,
             av_open_lock=av_open_lock,
             video_frontend=self.video_frontend)
+        
+        # ---- Teleop Control ----
+        self.gamepad_controller = GamePadOperator(self.tello)
 
         self.bridge = CvBridge()
         
@@ -119,6 +128,7 @@ class TelloSwarmMember:
         self.cmd_vel_subscriber = rospy.Subscriber(self.tn('cmd_vel'), TwistStamped, self.cmd_vel)
         self.emergency_subscriber = rospy.Subscriber(self.tn('emergency'), Empty, self.cmd_emergency)
         self.mission_subscriber = rospy.Subscriber(self.tn("mission"),String, self.run_mission)
+        self.teleop_subscriber = rospy.Subscriber("joy", Joy, self.gamepad_controller.control)
 
         # ---- Settings ----
         self.camera_direction = Tello.CAMERA_FORWARD
@@ -276,6 +286,118 @@ class TelloSwarmMember:
     def pn(self, parameter:str, default=None):
         return rospy.get_param("~%s_%s" % (self.prefix, parameter), default=default)
 
+
+
+# ----- Teleop Classes & Methods  ----- #
+
+class GamepadState:
+    def __init__(self):
+        self.A = False
+        self.B = False
+        self.X = False
+        self.Y = False
+        self.LB = False
+        self.RB = False
+        self.back = False
+        self.start = False
+        self.power = False
+        self.b_stick_l = False
+        self.b_stick_r = False
+        self.cross_left = False
+        self.cross_right = False
+        self.cross_top = False
+        self.cross_bottom = False
+        self.l_stick_up = 0
+        self.l_stick_left = 0
+        self.r_stick_up = 0
+        self.r_stick_left = 0
+
+class GamePadOperator():
+    def __init__(self, tello):
+        self.prev_state = GamepadState()
+        self.unlock_stick_control = False
+        self.tello = tello
+
+    def control(self, msg):
+        state = self.parse_msg(msg)
+
+        if self.tello.is_flying:
+            if state.back and not self.prev_state.back:
+                self.tello.land()
+            elif state.Y and not self.prev_state.Y:
+                self.tello.move_up(20)
+            elif state.A and not self.prev_state.A:
+                self.tello.move_down(20)
+            elif state.cross_top and not self.prev_state.cross_top:
+                self.tello.move_forward(20)
+            elif state.cross_bottom and not self.prev_state.cross_bottom:
+                self.tello.move_back(20)
+            elif state.cross_left and not self.prev_state.cross_left:
+                self.tello.move_left(20)
+            elif state.cross_right and not self.prev_state.cross_right:
+                self.tello.move_right(20)
+            elif state.power and not self.prev_state.power:
+                self.switch_stick_control()
+
+            if self.unlock_stick_control:
+                cmd = self.parse_stick(state)
+                self.tello.send_rc_control(*cmd)
+
+
+        else:
+            if state.start and not self.prev_state.start:
+                self.tello.takeoff()
+                
+        self.prev_state = state
+
+    def parse_msg(self, msg):
+        state = GamepadState()
+
+        state.A = msg.buttons[0] == 1
+        state.B = msg.buttons[1] == 1
+        state.X = msg.buttons[2] == 1
+        state.Y = msg.buttons[3] == 1
+        state.LB = msg.buttons[4] == 1
+        state.RB = msg.buttons[5] == 1
+        state.back = msg.buttons[6] == 1
+        state.start = msg.buttons[7] == 1
+        state.power = msg.buttons[8] == 1
+        state.b_stick_l = msg.buttons[9] == 1
+        state.b_stick_r = msg.buttons[10] == 1
+        state.cross_left = msg.axes[6] == 1
+        state.cross_right = msg.axes[6] == -1
+        state.cross_top = msg.axes[7] == 1
+        state.cross_bottom = msg.axes[7] == -1
+        state.l_stick_up = msg.axes[1]
+        state.l_stick_left = msg.axes[0]
+        state.r_stick_up = msg.axes[4]
+        state.r_stick_left = msg.axes[3]
+
+        return state
+
+    def switch_stick_control(self):
+        self.unlock_stick_control = not self.unlock_stick_control
+
+        if not self.unlock_stick_control:
+            self.tello.send_rc_control(0,0,0,0)
+            rospy.loginfo(f"Locked stick control")
+            return
+
+        rospy.loginfo(f"Unlocked stick control")
+
+    def parse_stick(self, state):
+        safeguard = 50
+        left_right = -int(state.l_stick_left * safeguard)
+        forward_backward = int(state.l_stick_up * safeguard)
+        up_down = int(state.r_stick_up * safeguard)
+        yaw_velocity = -int(state.r_stick_left * safeguard)
+
+        return (left_right, forward_backward, up_down, yaw_velocity)
+
+
+
+
+# ------------------------------------ #
 
 def main():
     rospy.init_node('tello_pilot_node')

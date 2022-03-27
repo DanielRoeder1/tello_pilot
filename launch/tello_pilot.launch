@@ -23,6 +23,8 @@
             <param name="a_mac" value="34:d2:62:ee:05:64" />
 
 		</node>
+		<arg name="teleop" default="false" />
+	    <node pkg="joy" name="joy_node" type="joy_node" if="$(arg teleop)"/>
 
 	</group>
 
