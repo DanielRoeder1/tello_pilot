@@ -10,7 +10,7 @@ from anyio import sleep
 import rospy
 from tf.transformations import quaternion_from_euler
 
-from std_msgs.msg import Empty, String
+from std_msgs.msg import Empty, String, Int32
 from sensor_msgs.msg import Image, Imu
 from sensor_msgs.msg import Joy
 from geometry_msgs.msg import TwistStamped
@@ -84,6 +84,7 @@ class TelloSwarmMember:
         self.old_state_time = None 
 
         self.imu_publisher = rospy.Publisher(self.tn('imu'), Imu, queue_size=1)
+        self.tof_publisher = rospy.Publisher(self.tn("tof_height"), Int32, queue_size = 1)
         # ---- IMU End ----
 
         # ---- Settings ----
@@ -91,12 +92,10 @@ class TelloSwarmMember:
         
 
 
-
         tello_ip = get_tello_ip(self.pn('mac'))
+
         if not tello_ip:
             raise ValueError('The tello drone could not be found in the local network')
-        
-        print(tello_ip)
 
         self.tello = Tello(host=tello_ip,
             state_update_callback=self.imu_odometry_callback,
@@ -155,7 +154,7 @@ class TelloSwarmMember:
 
         # ---- Keep-Alive Signal ----
         self.keep_alive_timer = rospy.Timer(rospy.Duration(3), self.keep_alive_callback)
-    
+
     def keep_alive_callback(self, event):
         #rospy.loginfo("keepalive")
         self.tello.send_keepalive()
@@ -208,6 +207,12 @@ class TelloSwarmMember:
         img_msg = self.bridge.cv2_to_imgmsg(self.frame_read.frame, 'rgb8')
         img_msg.header.stamp = rospy.Time.now()
         self.image_raw_publisher.publish(img_msg)
+
+        # Publish tof height in sync with images
+        tof = self.tello.get_distance_tof()
+        tof_msg = Int32()
+        tof_msg.data = tof
+        self.tof_publisher.publish(tof_msg)
 
     def cmd_emergency(self, msg):
         self.tello.emergency()
@@ -393,9 +398,6 @@ class GamePadOperator():
         yaw_velocity = -int(state.r_stick_left * safeguard)
 
         return (left_right, forward_backward, up_down, yaw_velocity)
-
-
-
 
 # ------------------------------------ #
 
