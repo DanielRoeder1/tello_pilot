@@ -322,6 +322,7 @@ class GamePadOperator():
         self.prev_state = GamepadState()
         self.unlock_stick_control = False
         self.tello = tello
+        self.safety_threshold = 50
 
     def control(self, msg):
         state = self.parse_msg(msg)
@@ -348,6 +349,7 @@ class GamePadOperator():
                 cmd = self.parse_stick(state)
                 self.tello.send_rc_control(*cmd)
 
+            self.set_safety_threshold(state)
 
         else:
             if state.start and not self.prev_state.start:
@@ -385,13 +387,13 @@ class GamePadOperator():
 
         if not self.unlock_stick_control:
             self.tello.send_rc_control(0,0,0,0)
-            rospy.loginfo(f"Locked stick control")
+            rospy.logwarn(f"Locked stick control")
             return
 
-        rospy.loginfo(f"Unlocked stick control")
+        rospy.logwarn(f"Unlocked stick control")
 
     def parse_stick(self, state):
-        safeguard = 50
+        safeguard = self.safety_threshold
         left_right = -int(state.l_stick_left * safeguard)
         forward_backward = int(state.l_stick_up * safeguard)
         up_down = int(state.r_stick_up * safeguard)
@@ -399,6 +401,13 @@ class GamePadOperator():
 
         return (left_right, forward_backward, up_down, yaw_velocity)
 
+    def set_safety_threshold(self, state):
+        if state.LB and state.RB and not self.prev_state.RB:
+            self.safety_threshold = min(self.safety_threshold+10,100)
+            rospy.logwarn(f"Speed threshold increased to {self.safety_threshold}")
+        elif state.RB and state.LB and not self.prev_state.LB:
+            self.safety_threshold = max(self.safety_threshold-10,0)
+            rospy.logwarn(f"Speed threshold decreased to {self.safety_threshold}")
 # ------------------------------------ #
 
 def main():
